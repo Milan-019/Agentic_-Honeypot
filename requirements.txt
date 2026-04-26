@@ -1,0 +1,10 @@
+langgraph
+google-generativeai
+fastapi
+uvicorn
+requests
+python-dotenv
+streamlit
+pydantic
+langchain-core
+langchain-google-genai
