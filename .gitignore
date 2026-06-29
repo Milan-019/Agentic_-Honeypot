@@ -49,6 +49,8 @@ intel/*.csv
 intel/*.jsonl
 sessions/
 session_logs/
+data/intel_logs/
+data/
 
 # ── LangGraph / LangChain ────────────────────────────────────────────
 .langgraph_cache/

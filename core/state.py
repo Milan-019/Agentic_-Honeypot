@@ -1,6 +1,10 @@
 """
-Core state schema for the Agentic Honeypot LangGraph pipeline.
-This is the single source of truth that flows through every node.
+core/state.py — Canonical state schema for the Agentic Honeypot pipeline.
+
+This is the SINGLE SOURCE OF TRUTH that flows through every LangGraph node.
+Every field is optional/defaulted so partial node updates work correctly.
+
+Pydantic v2 compatible — use .model_dump() not .dict()
 """
 
 from typing import Annotated, Literal, Optional
@@ -8,7 +12,7 @@ from pydantic import BaseModel, Field
 from langgraph.graph.message import add_messages
 
 
-# ── Scam Classification ─────────────────────────────────────────────────────
+# ── Enum-like Literals ───────────────────────────────────────────────────────
 
 ScamType = Literal[
     "upi_fraud",
@@ -23,46 +27,68 @@ ScamType = Literal[
 ThreatLevel = Literal["low", "medium", "high", "critical"]
 
 EngagementStrategy = Literal[
-    "play_dumb",       # Feign confusion, ask basic questions
-    "stall",           # Delay with excuses (no phone, slow internet, etc.)
-    "request_info",    # Actively fish for scammer's bank/UPI details
-    "escalate",        # Push scammer to reveal more by showing eagerness
-    "terminate",       # End conversation (scammer went cold / too suspicious)
+    "play_dumb",      # Feign confusion, ask basic questions
+    "stall",          # Delay with real-sounding excuses
+    "request_info",   # Actively fish for scammer's UPI/bank details
+    "escalate",       # Push scammer to confirm receiving payment details
+    "terminate",      # End conversation gracefully
 ]
 
 PersonaState = Literal[
-    "naive_victim",      # Elderly/first-time user persona
+    "naive_victim",           # Elderly/low-literacy Indian user
     "cautiously_interested",  # Curious but hesitant
-    "eager_victim",      # Appears ready to send money
+    "eager_victim",           # Appears ready to send money
 ]
 
 
-# ── Intelligence Harvested ───────────────────────────────────────────────────
+# ── Intelligence Container ───────────────────────────────────────────────────
 
 class ExtractedIntel(BaseModel):
+    """All criminal intelligence harvested from one session."""
     upi_ids: list[str] = Field(default_factory=list)
     phone_numbers: list[str] = Field(default_factory=list)
     bank_names: list[str] = Field(default_factory=list)
     account_numbers: list[str] = Field(default_factory=list)
+    ifsc_codes: list[str] = Field(default_factory=list)
     urls: list[str] = Field(default_factory=list)
     names: list[str] = Field(default_factory=list)
-    raw_snippets: list[str] = Field(default_factory=list)  # raw evidence
+    raw_snippets: list[str] = Field(default_factory=list)
+
+    def is_empty(self) -> bool:
+        return not any([
+            self.upi_ids, self.phone_numbers, self.bank_names,
+            self.account_numbers, self.ifsc_codes, self.urls, self.names,
+        ])
+
+    def summary(self) -> str:
+        parts = []
+        if self.upi_ids:       parts.append(f"UPI: {self.upi_ids}")
+        if self.phone_numbers: parts.append(f"Phones: {self.phone_numbers}")
+        if self.bank_names:    parts.append(f"Banks: {self.bank_names}")
+        if self.account_numbers: parts.append(f"Accounts: {self.account_numbers}")
+        if self.ifsc_codes:    parts.append(f"IFSC: {self.ifsc_codes}")
+        return " | ".join(parts) if parts else "None yet"
 
 
 # ── Main Graph State ─────────────────────────────────────────────────────────
 
 class HoneypotState(BaseModel):
     """
-    The complete state object passed between all LangGraph nodes.
-    Every field is optional to allow partial updates per node.
+    Complete state object passed between all LangGraph nodes.
+    LangGraph merges node return dicts into this via field name matching.
+
+    NOTE: LangGraph returns state as a plain dict after .invoke()
+    Always use result.get('field', default) in session_manager, never attribute access.
     """
 
-    # --- Conversation ---
+    # --- Identity ---
     session_id: str = ""
+
+    # --- Conversation (add_messages enables safe list merging across turns) ---
     messages: Annotated[list, add_messages] = Field(default_factory=list)
     current_scammer_message: str = ""
     turn_count: int = 0
-    max_turns: int = 20  # Safety cap to prevent infinite loops
+    max_turns: int = 20
 
     # --- Classification (set by intake_node) ---
     scam_type: ScamType = "unknown"
@@ -78,17 +104,16 @@ class HoneypotState(BaseModel):
     # --- Response (set by persona_node) ---
     bot_response: str = ""
 
-    # --- Intelligence (updated by extractor_node) ---
-    intel: ExtractedIntel = Field(default_factory=ExtractedIntel)
-    intel_yield_score: float = 0.0  # 0.0 to 1.0, how much we've harvested
+    # --- Intelligence (updated by extractor_node, accumulates across turns) ---
+    intel: dict = Field(default_factory=dict)
+    intel_yield_score: float = 0.0
 
     # --- Session Control (set by guard_node) ---
     should_continue: bool = True
     termination_reason: str = ""
 
-    # --- Metadata ---
+    # --- Telemetry ---
     model_used: str = ""
     total_time_wasted_seconds: float = 0.0
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = {"arbitrary_types_allowed": True}

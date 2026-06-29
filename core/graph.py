@@ -1,21 +1,12 @@
 """
-LangGraph graph assembly for the Agentic Honeypot.
+core/graph.py — Assembles all nodes into the LangGraph DAG.
 
-Graph topology (DAG):
-  START
-    ↓
-  intake_node        ← classify scammer message
-    ↓
-  strategy_node      ← decide engagement strategy
-    ↓
-  persona_node       ← generate in-character victim reply
-    ↓
-  extractor_node     ← harvest UPI IDs, phones, bank details
-    ↓
-  guard_node         ← should we continue or end?
-    ↓ (conditional)
-  [continue] → END (caller sends bot_response, loops on next turn)
-  [end]      → END (session closed, final intel report generated)
+Graph topology:
+  START → intake → strategy → persona → extractor → guard → END
+                                                        ↑
+                              (conditional: continue loops back via caller,
+                               end closes session — both route to END here
+                               since the caller handles the conversation loop)
 """
 
 from langgraph.graph import StateGraph, START, END
@@ -35,44 +26,44 @@ from core.nodes import (
 def build_graph(use_memory: bool = True):
     """
     Build and compile the Agentic Honeypot LangGraph.
-    
+
     Args:
-        use_memory: If True, attaches MemorySaver for session persistence.
-                    Set False for stateless single-turn usage.
-    
+        use_memory: If True, attaches MemorySaver for multi-turn session persistence.
+                    Each session uses a unique thread_id for isolation.
+                    Set False for stateless single-turn testing.
+
     Returns:
-        Compiled LangGraph app.
+        Compiled LangGraph application.
     """
     builder = StateGraph(HoneypotState)
 
-    # ── Register all nodes ──────────────────────────────────────────────────
+    # Register nodes
     builder.add_node("intake", intake_node)
     builder.add_node("strategy", strategy_node)
     builder.add_node("persona", persona_node)
     builder.add_node("extractor", extractor_node)
     builder.add_node("guard", guard_node)
 
-    # ── Define edges (execution order) ─────────────────────────────────────
+    # Linear edges
     builder.add_edge(START, "intake")
     builder.add_edge("intake", "strategy")
     builder.add_edge("strategy", "persona")
     builder.add_edge("persona", "extractor")
     builder.add_edge("extractor", "guard")
 
-    # Conditional exit: continue loop OR end session
+    # Conditional exit
+    # Both branches go to END — the difference is in the returned state
+    # (should_continue=True means caller will invoke again with next message;
+    #  should_continue=False means session is done)
     builder.add_conditional_edges(
         "guard",
         route_after_guard,
-        {
-            "continue": END,   # Caller handles looping (send next message)
-            "end": END,        # Final turn — session closes
-        },
+        {"continue": END, "end": END},
     )
 
-    # ── Compile ─────────────────────────────────────────────────────────────
     checkpointer = MemorySaver() if use_memory else None
     return builder.compile(checkpointer=checkpointer)
 
 
-# Module-level singleton for import convenience
+# Singleton — import this in session_manager and tests
 honeypot_graph = build_graph(use_memory=True)
