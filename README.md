@@ -1,4 +1,4 @@
-# 🍯 Agentic Honeypot
+# 🍯 AGENTIC HONEYPOT
 
 An AI-powered **scambaiting agent** that poses as a gullible victim to waste scammers' time and harvest their criminal intelligence — UPI IDs, phone numbers, bank account details — using a multi-node LangGraph pipeline.
 
@@ -9,16 +9,16 @@ An AI-powered **scambaiting agent** that poses as a gullible victim to waste sca
 Every scammer message flows through a 5-node LangGraph pipeline:
 
 ```
-START → intake → strategy → persona → extractor → guard → END
+START → Intake → Strategy → Persona → Extractor → Guard → END
 ```
 
 | Node | Job |
 |------|-----|
-| **intake** | Classifies the scam type (`upi_fraud`, `phishing`, `romance_scam`, etc.) and threat level |
-| **strategy** | Decides the engagement tactic: `play_dumb`, `stall`, `request_info`, `escalate`, or `terminate` |
-| **persona** | Generates an in-character victim reply (naive elderly Indian user) |
-| **extractor** | Harvests UPI IDs, phone numbers, bank accounts, IFSC codes via regex + LLM |
-| **guard** | Decides whether to continue or close the session |
+| **Intake** | Classifies the scam type (`upi_fraud`, `phishing`, `romance_scam`, etc.) and threat level |
+| **Strategy** | Decides the engagement tactic: `play_dumb`, `stall`, `request_info`, `escalate`, or `terminate` |
+| **Persona** | Generates an in-character victim reply (naive elderly Indian user) |
+| **Extractor** | Harvests UPI IDs, phone numbers, bank accounts, IFSC codes via regex + LLM |
+| **Guard** | Decides whether to continue or close the session |
 
 ---
 
